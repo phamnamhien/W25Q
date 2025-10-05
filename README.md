@@ -25,7 +25,7 @@ A portable, hardware-agnostic C library for Winbond W25Q series SPI flash memory
 | W25Q80 | 1MB | 0xEF4014 | 256 | 16 | ✅ Tested |
 | W25Q16 | 2MB | 0xEF4015 | 512 | 32 | ✅ Tested |
 | W25Q32 | 4MB | 0xEF4016 | 1024 | 64 | ⚠️ Untested |
-| W25Q64 | 8MB | 0xEF4017 | 2048 | 128 | ⚠️ Untestedd |
+| W25Q64 | 8MB | 0xEF4017 | 2048 | 128 | ⚠️ Untested |
 | W25Q128 | 16MB | 0xEF4018 | 4096 | 256 | ⚠️ Untested |
 | W25Q256 | 32MB | 0xEF4019 | 8192 | 512 | ⚠️ Untested |
 
