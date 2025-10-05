@@ -19,15 +19,15 @@ A portable, hardware-agnostic C library for Winbond W25Q series SPI flash memory
 
 | Model | Capacity | JEDEC ID | Sectors | Blocks | Status |
 |-------|----------|----------|---------|--------|--------|
-| W25Q10 | 128KB | 0xEF4011 | 32 | 2 | ✅ Tested |
-| W25Q20 | 256KB | 0xEF4012 | 64 | 4 | ✅ Tested |
-| W25Q40 | 512KB | 0xEF4013 | 128 | 8 | ✅ Tested |
+| W25Q10 | 128KB | 0xEF4011 | 32 | 2 | ⚠️ Untested |
+| W25Q20 | 256KB | 0xEF4012 | 64 | 4 | ⚠️ Untested|
+| W25Q40 | 512KB | 0xEF4013 | 128 | 8 | ⚠️ Untested |
 | W25Q80 | 1MB | 0xEF4014 | 256 | 16 | ✅ Tested |
 | W25Q16 | 2MB | 0xEF4015 | 512 | 32 | ✅ Tested |
-| W25Q32 | 4MB | 0xEF4016 | 1024 | 64 | ✅ Tested |
-| W25Q64 | 8MB | 0xEF4017 | 2048 | 128 | ✅ Tested |
-| W25Q128 | 16MB | 0xEF4018 | 4096 | 256 | ✅ Tested |
-| W25Q256 | 32MB | 0xEF4019 | 8192 | 512 | ✅ Tested |
+| W25Q32 | 4MB | 0xEF4016 | 1024 | 64 | ⚠️ Untested |
+| W25Q64 | 8MB | 0xEF4017 | 2048 | 128 | ⚠️ Untestedd |
+| W25Q128 | 16MB | 0xEF4018 | 4096 | 256 | ⚠️ Untested |
+| W25Q256 | 32MB | 0xEF4019 | 8192 | 512 | ⚠️ Untested |
 
 ## Quick Start
 
@@ -269,7 +269,30 @@ GND      --> GND
 
 ### Chip Not Detected
 
-- Verify SPI connections (CLKW25Q/
+- Verify SPI connections (CLK, MISO, MOSI, CS)
+- Check power supply (3.3V stable)
+- Reduce SPI clock speed to 1-10MHz for testing
+- Ensure CS is HIGH when idle
+- Verify SPI mode (0 or 3)
+
+### Write Failures
+
+- Ensure sector is erased before writing
+- Check address alignment
+- Verify data length ≤ 256 bytes
+- Confirm WEL bit is set after write enable
+
+### Data Corruption
+
+- Check for proper erase before write
+- Verify SPI signal integrity
+- Ensure adequate power supply
+- Check for address calculation errors
+
+## Project Structure
+
+```
+w25q-library/
 ├── w25q.h              # Public API header
 ├── w25q.c              # Implementation
 ├── examples/
@@ -286,6 +309,7 @@ GND      --> GND
 No special build requirements. Simply include `w25q.h` and compile `w25q.c` with your project.
 
 **Compiler flags:**
+
 ```bash
 -std=c11 -Wall -Wextra
 ```
@@ -323,7 +347,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - [W25Q Datasheet](https://www.winbond.com/hq/search/?keyword=W25Q)
 - [SPI Flash Memory Guide](https://www.embedded.com/introduction-to-spi-interface/)
 
-## 💖 Support This Project
+## Support This Project
+
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Q5Q1JW4XS)
 [![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/phamnamhien)
 
