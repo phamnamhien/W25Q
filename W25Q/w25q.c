@@ -29,7 +29,7 @@
  * This file is part of W25Q flash library.
  *
  * Author:          Your Name <your.email@example.com>
- * Version:         v1.0.0
+ * Version:         v1.0.1
  */
 #include "w25q.h"
 #include <stddef.h>
@@ -56,6 +56,8 @@
 #define W25Q_CMD_READ_DATA              0x03
 #define W25Q_CMD_FAST_READ              0x0B
 #define W25Q_CMD_READ_UNIQUE_ID         0x4B
+#define W25Q_CMD_ENTER_4BYTE_MODE       0xB7
+#define W25Q_CMD_EXIT_4BYTE_MODE        0xE9
 
 /* Status register bit definitions */
 #define W25Q_STATUS_BUSY                0x01
@@ -103,16 +105,28 @@ prv_wait_ready(w25q_t* dev) {
  */
 static w25q_result_t
 prv_write_enable(w25q_t* dev) {
+    uint8_t status;
+
     dev->ll.select();
     dev->ll.transmit((const uint8_t[]){W25Q_CMD_WRITE_ENABLE}, 1);
     dev->ll.deselect();
+
+    /* Verify WEL bit is set */
+    dev->ll.select();
+    dev->ll.transmit((const uint8_t[]){W25Q_CMD_READ_STATUS_REG1}, 1);
+    dev->ll.receive(&status, 1);
+    dev->ll.deselect();
+
+    if ((status & W25Q_STATUS_WEL) == 0) {
+        return W25Q_ERR;
+    }
 
     return W25Q_OK;
 }
 
 /**
  * \brief           Get chip capacity based on device ID
- * \param[in]       device_id: Device ID from chip
+ * \param[in]       device_id: Device ID from chip (capacity byte from JEDEC ID)
  * \return          Capacity in bytes, `0` if unknown
  */
 static uint32_t
@@ -179,12 +193,19 @@ w25q_deinit(w25q_t* dev) {
         return W25Q_ERR_PARAM;
     }
 
+    /* Exit 4-byte mode if W25Q256 */
+    if (dev->info.type == W25Q256) {
+        dev->ll.select();
+        dev->ll.transmit((const uint8_t[]){W25Q_CMD_EXIT_4BYTE_MODE}, 1);
+        dev->ll.deselect();
+    }
+
     dev->initialized = 0;
     return W25Q_OK;
 }
 
 /**
- * \brief           Read manufacturer and device ID
+ * \brief           Read manufacturer and device ID using JEDEC ID command
  * \param[in]       dev: W25Q device handle
  * \param[out]      manufacturer_id: Pointer to store manufacturer ID
  * \param[out]      device_id: Pointer to store device ID (capacity)
@@ -198,14 +219,14 @@ w25q_read_id(w25q_t* dev, uint8_t* manufacturer_id, uint8_t* device_id) {
         return W25Q_ERR_PARAM;
     }
 
-    /* Sử dụng JEDEC ID (0x9F) để đọc đúng capacity ID */
+    /* Use JEDEC ID command (0x9F) to read correct capacity ID */
     dev->ll.select();
     dev->ll.transmit((const uint8_t[]){W25Q_CMD_JEDEC_ID}, 1);
     dev->ll.receive(jedec_id, 3);
     dev->ll.deselect();
 
     *manufacturer_id = jedec_id[0];  /* 0xEF for Winbond */
-    *device_id = jedec_id[2];        /* Capacity: 0x15 for W25Q16 */
+    *device_id = jedec_id[2];        /* Capacity ID: 0x15 for W25Q16 */
 
     return W25Q_OK;
 }
@@ -254,6 +275,14 @@ w25q_detect(w25q_t* dev) {
     dev->info.sector_count = capacity / W25Q_SECTOR_SIZE;
     dev->info.block_count = capacity / W25Q_BLOCK_SIZE;
 
+    /* W25Q256 requires 4-byte address mode for full capacity access */
+    if (device_id == W25Q256) {
+        dev->ll.select();
+        dev->ll.transmit((const uint8_t[]){W25Q_CMD_ENTER_4BYTE_MODE}, 1);
+        dev->ll.deselect();
+        dev->ll.delay_ms(1);
+    }
+
     return W25Q_OK;
 }
 
@@ -267,7 +296,8 @@ w25q_detect(w25q_t* dev) {
  */
 w25q_result_t
 w25q_read(w25q_t* dev, uint32_t address, uint8_t* data, uint32_t len) {
-    uint8_t cmd[4];
+    uint8_t cmd[5];
+    uint8_t addr_len;
 
     if (dev == NULL || data == NULL || len == 0) {
         return W25Q_ERR_PARAM;
@@ -282,13 +312,24 @@ w25q_read(w25q_t* dev, uint32_t address, uint8_t* data, uint32_t len) {
         return W25Q_ERR_TIMEOUT;
     }
 
-    cmd[0] = W25Q_CMD_READ_DATA;
-    cmd[1] = (address >> 16) & 0xFF;
-    cmd[2] = (address >> 8) & 0xFF;
-    cmd[3] = address & 0xFF;
+    /* W25Q256 uses 4-byte address */
+    if (dev->info.type == W25Q256) {
+        cmd[0] = W25Q_CMD_READ_DATA;
+        cmd[1] = (address >> 24) & 0xFF;
+        cmd[2] = (address >> 16) & 0xFF;
+        cmd[3] = (address >> 8) & 0xFF;
+        cmd[4] = address & 0xFF;
+        addr_len = 5;
+    } else {
+        cmd[0] = W25Q_CMD_READ_DATA;
+        cmd[1] = (address >> 16) & 0xFF;
+        cmd[2] = (address >> 8) & 0xFF;
+        cmd[3] = address & 0xFF;
+        addr_len = 4;
+    }
 
     dev->ll.select();
-    dev->ll.transmit(cmd, 4);
+    dev->ll.transmit(cmd, addr_len);
     dev->ll.receive(data, len);
     dev->ll.deselect();
 
@@ -305,7 +346,8 @@ w25q_read(w25q_t* dev, uint32_t address, uint8_t* data, uint32_t len) {
  */
 w25q_result_t
 w25q_write_page(w25q_t* dev, uint32_t address, const uint8_t* data, uint32_t len) {
-    uint8_t cmd[4];
+    uint8_t cmd[5];
+    uint8_t addr_len;
 
     if (dev == NULL || data == NULL || len == 0 || len > W25Q_PAGE_SIZE) {
         return W25Q_ERR_PARAM;
@@ -321,15 +363,28 @@ w25q_write_page(w25q_t* dev, uint32_t address, const uint8_t* data, uint32_t len
     }
 
     /* Enable write */
-    prv_write_enable(dev);
+    if (prv_write_enable(dev) != W25Q_OK) {
+        return W25Q_ERR;
+    }
 
-    cmd[0] = W25Q_CMD_PAGE_PROGRAM;
-    cmd[1] = (address >> 16) & 0xFF;
-    cmd[2] = (address >> 8) & 0xFF;
-    cmd[3] = address & 0xFF;
+    /* W25Q256 uses 4-byte address */
+    if (dev->info.type == W25Q256) {
+        cmd[0] = W25Q_CMD_PAGE_PROGRAM;
+        cmd[1] = (address >> 24) & 0xFF;
+        cmd[2] = (address >> 16) & 0xFF;
+        cmd[3] = (address >> 8) & 0xFF;
+        cmd[4] = address & 0xFF;
+        addr_len = 5;
+    } else {
+        cmd[0] = W25Q_CMD_PAGE_PROGRAM;
+        cmd[1] = (address >> 16) & 0xFF;
+        cmd[2] = (address >> 8) & 0xFF;
+        cmd[3] = address & 0xFF;
+        addr_len = 4;
+    }
 
     dev->ll.select();
-    dev->ll.transmit(cmd, 4);
+    dev->ll.transmit(cmd, addr_len);
     dev->ll.transmit(data, len);
     dev->ll.deselect();
 
@@ -340,12 +395,13 @@ w25q_write_page(w25q_t* dev, uint32_t address, const uint8_t* data, uint32_t len
 /**
  * \brief           Erase 4KB sector
  * \param[in]       dev: W25Q device handle
- * \param[in]       address: Sector address (must be sector-aligned)
+ * \param[in]       address: Sector address (should be sector-aligned)
  * \return          \ref W25Q_OK on success, member of \ref w25q_result_t otherwise
  */
 w25q_result_t
 w25q_erase_sector(w25q_t* dev, uint32_t address) {
-    uint8_t cmd[4];
+    uint8_t cmd[5];
+    uint8_t addr_len;
 
     if (dev == NULL) {
         return W25Q_ERR_PARAM;
@@ -361,15 +417,28 @@ w25q_erase_sector(w25q_t* dev, uint32_t address) {
     }
 
     /* Enable write */
-    prv_write_enable(dev);
+    if (prv_write_enable(dev) != W25Q_OK) {
+        return W25Q_ERR;
+    }
 
-    cmd[0] = W25Q_CMD_SECTOR_ERASE_4K;
-    cmd[1] = (address >> 16) & 0xFF;
-    cmd[2] = (address >> 8) & 0xFF;
-    cmd[3] = address & 0xFF;
+    /* W25Q256 uses 4-byte address */
+    if (dev->info.type == W25Q256) {
+        cmd[0] = W25Q_CMD_SECTOR_ERASE_4K;
+        cmd[1] = (address >> 24) & 0xFF;
+        cmd[2] = (address >> 16) & 0xFF;
+        cmd[3] = (address >> 8) & 0xFF;
+        cmd[4] = address & 0xFF;
+        addr_len = 5;
+    } else {
+        cmd[0] = W25Q_CMD_SECTOR_ERASE_4K;
+        cmd[1] = (address >> 16) & 0xFF;
+        cmd[2] = (address >> 8) & 0xFF;
+        cmd[3] = address & 0xFF;
+        addr_len = 4;
+    }
 
     dev->ll.select();
-    dev->ll.transmit(cmd, 4);
+    dev->ll.transmit(cmd, addr_len);
     dev->ll.deselect();
 
     /* Wait for erase completion */
@@ -379,12 +448,13 @@ w25q_erase_sector(w25q_t* dev, uint32_t address) {
 /**
  * \brief           Erase 32KB block
  * \param[in]       dev: W25Q device handle
- * \param[in]       address: Block address (must be 32KB-aligned)
+ * \param[in]       address: Block address (should be 32KB-aligned)
  * \return          \ref W25Q_OK on success, member of \ref w25q_result_t otherwise
  */
 w25q_result_t
 w25q_erase_block_32k(w25q_t* dev, uint32_t address) {
-    uint8_t cmd[4];
+    uint8_t cmd[5];
+    uint8_t addr_len;
 
     if (dev == NULL) {
         return W25Q_ERR_PARAM;
@@ -400,15 +470,28 @@ w25q_erase_block_32k(w25q_t* dev, uint32_t address) {
     }
 
     /* Enable write */
-    prv_write_enable(dev);
+    if (prv_write_enable(dev) != W25Q_OK) {
+        return W25Q_ERR;
+    }
 
-    cmd[0] = W25Q_CMD_BLOCK_ERASE_32K;
-    cmd[1] = (address >> 16) & 0xFF;
-    cmd[2] = (address >> 8) & 0xFF;
-    cmd[3] = address & 0xFF;
+    /* W25Q256 uses 4-byte address */
+    if (dev->info.type == W25Q256) {
+        cmd[0] = W25Q_CMD_BLOCK_ERASE_32K;
+        cmd[1] = (address >> 24) & 0xFF;
+        cmd[2] = (address >> 16) & 0xFF;
+        cmd[3] = (address >> 8) & 0xFF;
+        cmd[4] = address & 0xFF;
+        addr_len = 5;
+    } else {
+        cmd[0] = W25Q_CMD_BLOCK_ERASE_32K;
+        cmd[1] = (address >> 16) & 0xFF;
+        cmd[2] = (address >> 8) & 0xFF;
+        cmd[3] = address & 0xFF;
+        addr_len = 4;
+    }
 
     dev->ll.select();
-    dev->ll.transmit(cmd, 4);
+    dev->ll.transmit(cmd, addr_len);
     dev->ll.deselect();
 
     /* Wait for erase completion */
@@ -418,12 +501,13 @@ w25q_erase_block_32k(w25q_t* dev, uint32_t address) {
 /**
  * \brief           Erase 64KB block
  * \param[in]       dev: W25Q device handle
- * \param[in]       address: Block address (must be 64KB-aligned)
+ * \param[in]       address: Block address (should be 64KB-aligned)
  * \return          \ref W25Q_OK on success, member of \ref w25q_result_t otherwise
  */
 w25q_result_t
 w25q_erase_block_64k(w25q_t* dev, uint32_t address) {
-    uint8_t cmd[4];
+    uint8_t cmd[5];
+    uint8_t addr_len;
 
     if (dev == NULL) {
         return W25Q_ERR_PARAM;
@@ -439,15 +523,28 @@ w25q_erase_block_64k(w25q_t* dev, uint32_t address) {
     }
 
     /* Enable write */
-    prv_write_enable(dev);
+    if (prv_write_enable(dev) != W25Q_OK) {
+        return W25Q_ERR;
+    }
 
-    cmd[0] = W25Q_CMD_BLOCK_ERASE_64K;
-    cmd[1] = (address >> 16) & 0xFF;
-    cmd[2] = (address >> 8) & 0xFF;
-    cmd[3] = address & 0xFF;
+    /* W25Q256 uses 4-byte address */
+    if (dev->info.type == W25Q256) {
+        cmd[0] = W25Q_CMD_BLOCK_ERASE_64K;
+        cmd[1] = (address >> 24) & 0xFF;
+        cmd[2] = (address >> 16) & 0xFF;
+        cmd[3] = (address >> 8) & 0xFF;
+        cmd[4] = address & 0xFF;
+        addr_len = 5;
+    } else {
+        cmd[0] = W25Q_CMD_BLOCK_ERASE_64K;
+        cmd[1] = (address >> 16) & 0xFF;
+        cmd[2] = (address >> 8) & 0xFF;
+        cmd[3] = address & 0xFF;
+        addr_len = 4;
+    }
 
     dev->ll.select();
-    dev->ll.transmit(cmd, 4);
+    dev->ll.transmit(cmd, addr_len);
     dev->ll.deselect();
 
     /* Wait for erase completion */
@@ -471,7 +568,9 @@ w25q_erase_chip(w25q_t* dev) {
     }
 
     /* Enable write */
-    prv_write_enable(dev);
+    if (prv_write_enable(dev) != W25Q_OK) {
+        return W25Q_ERR;
+    }
 
     dev->ll.select();
     dev->ll.transmit((const uint8_t[]){W25Q_CMD_CHIP_ERASE}, 1);
@@ -514,7 +613,7 @@ w25q_wake_up(w25q_t* dev) {
     dev->ll.transmit((const uint8_t[]){W25Q_CMD_RELEASE_POWER_DOWN}, 1);
     dev->ll.deselect();
 
-    /* Wait for device to wake up (typical 3us) */
+    /* Wait for device to wake up (tRES2 = 3us min, use 1ms to be safe) */
     dev->ll.delay_ms(1);
 
     return W25Q_OK;
