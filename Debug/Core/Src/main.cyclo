@@ -1,0 +1,14 @@
+../Core/Src/main.c:66:5:_write	1
+../Core/Src/main.c:88:1:prv_spi_init	1
+../Core/Src/main.c:100:1:prv_spi_select	1
+../Core/Src/main.c:110:1:prv_spi_deselect	1
+../Core/Src/main.c:122:1:prv_spi_transmit	1
+../Core/Src/main.c:136:1:prv_spi_receive	1
+../Core/Src/main.c:151:1:prv_spi_transmit_receive	1
+../Core/Src/main.c:163:1:prv_delay_ms	1
+../Core/Src/main.c:183:1:print_chip_info	10
+../Core/Src/main.c:233:1:w25q_demo_test	21
+../Core/Src/main.c:425:5:main	1
+../Core/Src/main.c:472:6:SystemClock_Config	3
+../Core/Src/main.c:525:6:HAL_TIM_PeriodElapsedCallback	2
+../Core/Src/main.c:543:6:Error_Handler	1
