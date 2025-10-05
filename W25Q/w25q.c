@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (c) 2025 Your Name
+ * Copyright (c) 2025 Pham Nam Hien
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -28,7 +28,7 @@
  *
  * This file is part of W25Q flash library.
  *
- * Author:          Your Name <your.email@example.com>
+ * Author:          Pham Nam Hien <phamnamhien@gmail.com>
  * Version:         v1.0.1
  */
 #include "w25q.h"
