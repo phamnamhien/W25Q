@@ -1,3 +1,9 @@
+## Support This Project
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Q5Q1JW4XS)
+[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/phamnamhien)
+
+
 # W25Q Flash Memory Library
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -346,11 +352,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 - [W25Q Datasheet](https://www.winbond.com/hq/search/?keyword=W25Q)
 - [SPI Flash Memory Guide](https://www.embedded.com/introduction-to-spi-interface/)
-
-## Support This Project
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Q5Q1JW4XS)
-[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/phamnamhien)
 
 ---
 
